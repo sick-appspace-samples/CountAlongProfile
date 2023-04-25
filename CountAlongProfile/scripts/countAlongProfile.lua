@@ -2,39 +2,26 @@
 --Start of Global Scope---------------------------------------------------------
 
 -- Create and configure decorators
-local passTeachDeco = View.ShapeDecoration.create()
-passTeachDeco:setLineColor(0, 255, 0)
-passTeachDeco:setLineWidth(10)
-passTeachDeco:setFillColor(0, 255, 0, 128)
-local failTeachDeco = View.ShapeDecoration.create()
-failTeachDeco:setLineColor(255, 0, 0)
-failTeachDeco:setLineWidth(10)
-failTeachDeco:setFillColor(255, 0, 0, 128)
+local passTeachDeco = View.ShapeDecoration.create():setLineColor(0, 255, 0)
+passTeachDeco:setLineWidth(10):setFillColor(0, 255, 0, 128)
+local failTeachDeco = View.ShapeDecoration.create():setLineColor(255, 0, 0)
+failTeachDeco:setLineWidth(10):setFillColor(255, 0, 0, 128)
 
 local risingEdgeDeco = View.ShapeDecoration.create()
-risingEdgeDeco:setLineColor(59, 156, 208)
-risingEdgeDeco:setPointSize(40)
+risingEdgeDeco:setLineColor(59, 156, 208):setPointSize(40)
 
 local fallingLineDeco = View.ShapeDecoration.create()
-fallingLineDeco:setLineColor(242, 148, 0)
-fallingLineDeco:setPointSize(40)
+fallingLineDeco:setLineColor(242, 148, 0):setPointSize(40)
 
 local graphDeco = View.GraphDecoration.create()
-graphDeco:setDrawSize(5)
-graphDeco:setDynamicSizing(true)
+graphDeco:setDrawSize(5):setDynamicSizing(true)
 
 local passTextDeco = View.TextDecoration.create()
-passTextDeco:setPosition(50, 1500)
-passTextDeco:setSize(70)
-passTextDeco:setColor(0, 155, 0)
+passTextDeco:setPosition(50, 1500):setSize(70):setColor(0, 155, 0)
 local failTextDeco = View.TextDecoration.create()
-failTextDeco:setPosition(50, 1500)
-failTextDeco:setSize(70)
-failTextDeco:setColor(255, 0, 0)
+failTextDeco:setPosition(50, 1500):setSize(70):setColor(255, 0, 0)
 local textDeco = View.TextDecoration.create()
-textDeco:setPosition(20, 80)
-textDeco:setSize(70)
-textDeco:setColor(0, 0, 0)
+textDeco:setPosition(20, 80):setSize(70):setColor(0, 0, 0)
 
 -- Read images from the 'resources' directory
 local IMAGE_PATH = 'resources/'
@@ -105,45 +92,6 @@ end
 Script.register('Engine.OnStarted', main)
 -- serve API in global scope
 
---@segment(profile:Profile, lowerThreshold:float, upperThreshold:float):table,table
-local function segment(profile, lowerThreshold, upperThreshold)
-  -- Find all segments of the profile that are between the lower and upper threshold
-  -- The segments are returned as two lists of start and stop indexes
-  -- Values that are not valid are counted as outside the thresholds
-  local previousWasSegment = false
-  local allValid = not profile:getValidFlagsEnabled()
-  local startIndices = {}
-  local stopIndices = {}
-  for ii = 0, Profile.getSize(profile) - 1 do
-    local validFlag = profile:getValidFlag(ii)
-    if
-      ((allValid or (validFlag ~= 0)) and
-        (profile:getValue(ii) >= lowerThreshold) and
-        (profile:getValue(ii) <= upperThreshold))
-     then
-      -- Current value is in range
-      if (not previousWasSegment) then
-        -- Set this as start index if this is the first value in threshold range
-        table.insert(startIndices, ii)
-        previousWasSegment = true
-      end
-    else
-      -- Current value is not in range or not valid
-      if (previousWasSegment) then
-        -- Set previous index as stop index if this is the first value outside range
-        table.insert(stopIndices, ii - 1)
-        previousWasSegment = false
-      end
-    end
-  end
-  -- Handle if the last segment lasts to the end of the profile
-  if (previousWasSegment) then
-    table.insert(stopIndices, Profile.getSize(profile) - 1)
-  end
-
-  return startIndices, stopIndices
-end
-
 -- This callback is called for every new image
 -- @handleNewImage(liveImage: Image, sensorData: SensorData)
 local function handleNewImage(liveImage, sensorData)
@@ -166,16 +114,16 @@ local function handleNewImage(liveImage, sensorData)
   -----------------------------------------------
   local thresholdValueLow = 5500
   local thresholdValueHigh = 6500
-  local startIndex, stopIndex = segment(profile, thresholdValueLow, thresholdValueHigh)
-  -- There will be a Profile.segment() function available in the next AppEngine release.
- 
+  local segments = Profile.segment(profile, thresholdValueLow, thresholdValueHigh)
+  local regions = Profile.IndexRegion.split(segments)
+
   ----------------------------------------------
   -- The number of tea bags is the number segments with a certain size
   -----------------------------------------------
   local numberOfTeaBags = 0
-  for jj = 1, #startIndex do
-    local sum = Profile.getSum(profile, startIndex[jj], stopIndex[jj])
-    if (sum > 50000 and sum < 140000) then
+  local sums = Profile.getSum(profile, regions)
+  for jj = 1, #sums do
+    if (sums[jj] > 50000 and sums[jj] < 140000) then
       numberOfTeaBags = numberOfTeaBags + 1
     end
   end
@@ -202,6 +150,7 @@ local function handleNewImage(liveImage, sensorData)
   -- Show profile
   graphDeco:setTitle('Live image:\n' .. imgName)
   v2:addProfile(profile, graphDeco)
+  local startIndex, stopIndex = Profile.IndexRegion.toStartStop(segments)
   for jj = 1, #startIndex do
     v2:addPoint(Point.create(startIndex[jj], thresholdValueLow), fallingLineDeco)
     v2:addPoint(Point.create(stopIndex[jj], thresholdValueLow), risingEdgeDeco)
